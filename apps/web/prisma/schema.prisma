@@ -1,0 +1,499 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  COUNSELOR
+  CONTENT_MANAGER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum EnquiryStatus {
+  NEW
+  ASSIGNED
+  CONTACTED
+  COUNSELING
+  FOLLOW_UP
+  ADMISSION_SUPPORT
+  CONVERTED
+  CLOSED
+}
+
+enum EnquirySource {
+  HOME_HERO
+  ADMISSION_PAGE
+  ADMISSION_QUERY
+  PROGRAM_PAGE
+  COUNSELING
+  ENQUIRY
+  CONTACT
+  DIRECT
+  OTHER
+}
+
+enum FollowUpStatus {
+  SCHEDULED
+  COMPLETED
+  MISSED
+  CANCELLED
+}
+
+enum InteractionChannel {
+  PHONE
+  WHATSAPP
+  IN_PERSON
+  EMAIL
+}
+
+enum ContentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ContactStatus {
+  UNREAD
+  READ
+  RESPONDED
+}
+
+enum DonationStatus {
+  INITIATED
+  PENDING
+  SUCCESSFUL
+  FAILED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum NotificationType {
+  ENQUIRY_NEW
+  ENQUIRY_ASSIGNED
+  FOLLOWUP_DUE
+  SYSTEM_ALERT
+  GENERAL
+}
+
+// ============================================================================
+// 1. USER (Staff & Administrators)
+// ============================================================================
+
+model User {
+  id           String     @id @default(uuid())
+  name         String
+  email        String     @unique
+  passwordHash String     @map("password_hash")
+  role         UserRole   @default(COUNSELOR)
+  status       UserStatus @default(ACTIVE)
+  phone        String?
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  assignedEnquiries    AdmissionEnquiry[]    @relation("AssignedCounselor")
+  followUps            FollowUp[]            @relation("CounselorFollowUps")
+  conversationMessages ConversationMessage[] @relation("MessageSender")
+  createdNews          News[]                @relation("NewsAuthor")
+  notifications        Notification[]        @relation("UserNotifications")
+  auditLogs            AuditLog[]            @relation("UserAuditLogs")
+
+  @@index([role])
+  @@index([status])
+  @@map("users")
+}
+
+// ============================================================================
+// 2. STUDENT (Master Student Identity)
+// ============================================================================
+
+model Student {
+  id             String   @id @default(uuid())
+  firstName      String   @map("first_name")
+  phone          String
+  email          String
+  address        String
+  district       String
+  areaOfInterest String   @map("area_of_interest")
+  programId      String?  @map("program_id")
+  program        Program? @relation(fields: [programId], references: [id], onDelete: SetNull)
+  mark12th       String   @map("mark_12th")
+  consentGiven   Boolean  @default(true) @map("consent_given")
+  consentGivenAt DateTime @default(now()) @map("consent_given_at")
+
+  // Sensitive Aadhaar Storage (Encrypted via AES-256-GCM; masked for display)
+  aadhaarEncrypted String? @map("aadhaar_encrypted")
+  aadhaarMasked    String? @map("aadhaar_masked")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  enquiries     AdmissionEnquiry[]
+  followUps     FollowUp[]
+  conversations Conversation[]
+
+  @@index([phone])
+  @@index([email])
+  @@index([district])
+  @@index([areaOfInterest])
+  @@map("students")
+}
+
+// ============================================================================
+// 3. ADMISSION ENQUIRY (Enquiry Business Flow)
+// ============================================================================
+
+model AdmissionEnquiry {
+  id                  String        @id @default(uuid())
+  enquiryCode         String        @unique @map("enquiry_code") // e.g. SG-2026-00101
+  studentId           String        @map("student_id")
+  student             Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  programId           String?       @map("program_id")
+  program             Program?      @relation(fields: [programId], references: [id], onDelete: SetNull)
+  source              EnquirySource @default(ENQUIRY)
+  status              EnquiryStatus @default(NEW)
+  assignedCounselorId String?       @map("assigned_counselor_id")
+  assignedCounselor   User?         @relation("AssignedCounselor", fields: [assignedCounselorId], references: [id], onDelete: SetNull)
+  internalNotes       String?       @map("internal_notes") @db.Text
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  followUps     FollowUp[]
+  conversations Conversation[]
+
+  @@index([status])
+  @@index([source])
+  @@index([assignedCounselorId])
+  @@index([createdAt])
+  @@index([enquiryCode])
+  @@map("admission_enquiries")
+}
+
+// ============================================================================
+// 4. PROGRAM CATEGORY
+// ============================================================================
+
+model ProgramCategory {
+  id           String        @id @default(uuid())
+  name         String
+  slug         String        @unique
+  description  String?       @db.Text
+  icon         String?
+  displayOrder Int           @default(0) @map("display_order")
+  status       ContentStatus @default(PUBLISHED)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  programs Program[]
+
+  @@index([slug])
+  @@index([status])
+  @@index([displayOrder])
+  @@map("program_categories")
+}
+
+// ============================================================================
+// 5. PROGRAM
+// ============================================================================
+
+model Program {
+  id                  String          @id @default(uuid())
+  categoryId          String          @map("category_id")
+  category            ProgramCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name                String
+  slug                String          @unique
+  degreeLevel         String          @map("degree_level") // e.g. Undergraduate, Postgraduate, Diploma
+  durationYears       String          @map("duration_years")
+  overview            String          @db.Text
+  eligibilityCriteria String?         @map("eligibility_criteria") @db.Text
+  careerOpportunities String?         @map("career_opportunities") @db.Text
+  imageUrl            String?         @map("image_url")
+  displayOrder        Int             @default(0) @map("display_order")
+  isPublished         Boolean         @default(true) @map("is_published")
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  enquiries AdmissionEnquiry[]
+  students  Student[]
+
+  @@index([slug])
+  @@index([categoryId])
+  @@index([isPublished])
+  @@index([displayOrder])
+  @@map("programs")
+}
+
+// ============================================================================
+// 6. FOLLOW UP
+// ============================================================================
+
+model FollowUp {
+  id             String           @id @default(uuid())
+  enquiryId      String           @map("enquiry_id")
+  enquiry        AdmissionEnquiry @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+  studentId      String           @map("student_id")
+  student        Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  counselorId    String           @map("counselor_id")
+  counselor      User             @relation("CounselorFollowUps", fields: [counselorId], references: [id], onDelete: Cascade)
+  scheduledAt    DateTime         @map("scheduled_at")
+  completedAt    DateTime?        @map("completed_at")
+  status         FollowUpStatus   @default(SCHEDULED)
+  feedbackNote   String?          @map("feedback_note") @db.Text
+  nextActionDate DateTime?        @map("next_action_date")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+
+  @@index([enquiryId])
+  @@index([counselorId])
+  @@index([scheduledAt])
+  @@index([status])
+  @@map("follow_ups")
+}
+
+// ============================================================================
+// 7. CONVERSATION
+// ============================================================================
+
+model Conversation {
+  id        String           @id @default(uuid())
+  enquiryId String           @map("enquiry_id")
+  enquiry   AdmissionEnquiry @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+  studentId String           @map("student_id")
+  student   Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  title     String?
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  messages ConversationMessage[]
+
+  @@index([enquiryId])
+  @@index([studentId])
+  @@map("conversations")
+}
+
+// ============================================================================
+// 8. CONVERSATION MESSAGE
+// ============================================================================
+
+model ConversationMessage {
+  id             String             @id @default(uuid())
+  conversationId String             @map("conversation_id")
+  conversation   Conversation       @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String             @map("sender_id")
+  sender         User               @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  channel        InteractionChannel @default(PHONE)
+  message        String             @db.Text
+  createdAt      DateTime           @default(now()) @map("created_at")
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([createdAt])
+  @@map("conversation_messages")
+}
+
+// ============================================================================
+// 9. NEWS (CMS Articles)
+// ============================================================================
+
+model News {
+  id          String   @id @default(uuid())
+  title       String
+  slug        String   @unique
+  category    String
+  excerpt     String   @db.Text
+  content     String   @db.Text
+  coverImage  String?  @map("cover_image")
+  isPublished Boolean  @default(true) @map("is_published")
+  publishedAt DateTime @default(now()) @map("published_at")
+  authorId    String   @map("author_id")
+  author      User     @relation("NewsAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([slug])
+  @@index([isPublished])
+  @@index([publishedAt])
+  @@index([category])
+  @@map("news")
+}
+
+// ============================================================================
+// 10. CONTACT ENQUIRY (Public Contact Messages)
+// ============================================================================
+
+model ContactEnquiry {
+  id        String        @id @default(uuid())
+  name      String
+  email     String
+  phone     String
+  subject   String
+  message   String        @db.Text
+  status    ContactStatus @default(UNREAD)
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("contact_enquiries")
+}
+
+// ============================================================================
+// 11. IMPACT STATISTIC (Public Verified Impact Metrics)
+// ============================================================================
+
+model ImpactStatistic {
+  id           String        @id @default(uuid())
+  metricKey    String        @unique @map("metric_key")
+  numberLabel  String        @map("number_label") // e.g. "5000+", "120+", "98%"
+  title        String
+  description  String?       @db.Text
+  displayOrder Int           @default(0) @map("display_order")
+  status       ContentStatus @default(PUBLISHED)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  @@index([displayOrder])
+  @@index([status])
+  @@map("impact_statistics")
+}
+
+// ============================================================================
+// 12. DONATION (Feature-Flagged Welfare Support)
+// ============================================================================
+
+model Donation {
+  id              String         @id @default(uuid())
+  donorName       String         @map("donor_name")
+  donorEmail      String         @map("donor_email")
+  donorPhone      String?        @map("donor_phone")
+  amount          Decimal        @db.Decimal(10, 2)
+  currency        String         @default("INR")
+  supportCategory String         @map("support_category")
+  status          DonationStatus @default(INITIATED)
+  receiptNumber   String?        @unique @map("receipt_number")
+  isAnonymous     Boolean        @default(false) @map("is_anonymous")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  transactions DonationTransaction[]
+
+  @@index([status])
+  @@index([donorEmail])
+  @@index([createdAt])
+  @@map("donations")
+}
+
+// ============================================================================
+// 13. DONATION TRANSACTION (Feature-Flagged Gateway Record)
+// ============================================================================
+
+model DonationTransaction {
+  id               String        @id @default(uuid())
+  donationId       String        @map("donation_id")
+  donation         Donation      @relation(fields: [donationId], references: [id], onDelete: Cascade)
+  gatewayReference String?       @map("gateway_reference")
+  gatewayName      String        @default("MOCK_GATEWAY") @map("gateway_name")
+  amount           Decimal       @db.Decimal(10, 2)
+  paymentStatus    PaymentStatus @default(PENDING) @map("payment_status")
+  rawResponse      String?       @map("raw_response") @db.Text
+  createdAt        DateTime      @default(now()) @map("created_at")
+
+  @@index([donationId])
+  @@index([paymentStatus])
+  @@index([gatewayReference])
+  @@map("donation_transactions")
+}
+
+// ============================================================================
+// 14. NOTIFICATION (Internal Alerts for Admins & Counselors)
+// ============================================================================
+
+model Notification {
+  id          String           @id @default(uuid())
+  recipientId String           @map("recipient_id")
+  recipient   User             @relation("UserNotifications", fields: [recipientId], references: [id], onDelete: Cascade)
+  type        NotificationType @default(GENERAL)
+  title       String
+  message     String           @db.Text
+  linkUrl     String?          @map("link_url")
+  isRead      Boolean          @default(false) @map("is_read")
+  readAt      DateTime?        @map("read_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  @@index([recipientId])
+  @@index([isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// ============================================================================
+// 15. AUDIT LOG (Administrative Security Trail)
+// ============================================================================
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?  @map("user_id")
+  user      User?    @relation("UserAuditLogs", fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  entity    String
+  entityId  String   @map("entity_id")
+  details   String?  @db.Text
+  ipAddress String?  @map("ip_address")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([action])
+  @@index([entity])
+  @@index([entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ============================================================================
+// 16. STUDENT STORY (Student Welfare & Success Stories)
+// ============================================================================
+
+model StudentStory {
+  id           String        @id @default(uuid())
+  title        String
+  studentName  String        @map("student_name")
+  program      String?
+  content      String        @db.Text
+  coverImage   String?       @map("cover_image")
+  status       ContentStatus @default(PUBLISHED)
+  displayOrder Int           @default(0) @map("display_order")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([displayOrder])
+  @@map("student_stories")
+}
