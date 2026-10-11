@@ -73,6 +73,17 @@ async function main() {
     },
   });
 
+  const counselor3 = await prisma.user.create({
+    data: {
+      name: 'Rajesh Kannan (Counselor)',
+      email: 'counselor.rajesh@shasthiguru.com',
+      passwordHash: defaultPasswordHash,
+      role: UserRole.COUNSELOR,
+      status: UserStatus.ACTIVE,
+      phone: '+91 98400 00006',
+    },
+  });
+
   const contentManager = await prisma.user.create({
     data: {
       name: 'Vignesh Kumar (Content Lead)',

@@ -137,14 +137,14 @@ export default function AdminLoginPage() {
 
               <button
                 type="button"
-                onClick={() => fillCredentials('counselor.rajesh@shasthiguru.com', 'Counselor2026!')}
+                onClick={() => fillCredentials('karthik.counselor@shasthiguru.com', 'ShasthiAdmin2026!')}
                 className="p-2.5 rounded-xl border border-slate-200 text-left hover:border-brand-navy-400 hover:bg-slate-50 transition-colors"
               >
                 <div className="flex items-center gap-1.5 font-bold text-brand-navy-900">
                   <UserCheck className="w-3.5 h-3.5 text-brand-gold-600" />
                   <span>Counselor</span>
                 </div>
-                <span className="text-[10px] text-slate-500 block truncate">Rajesh (Engineering)</span>
+                <span className="text-[10px] text-slate-500 block truncate">Karthik (Lead Counselor)</span>
               </button>
             </div>
           </div>
