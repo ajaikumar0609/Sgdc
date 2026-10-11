@@ -1,0 +1,29 @@
+{
+  "name": "shasthi-guru-dream-campus",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Shasthi Guru Dream Campus - Digital Education Guidance and Admission CRM Platform",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "prisma": {
+    "seed": "npx tsx packages/database/prisma/seed.ts"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "db:migrate": "npx prisma migrate dev --schema=packages/database/prisma/schema.prisma",
+    "db:seed": "npx prisma db seed --schema=packages/database/prisma/schema.prisma",
+    "db:studio": "npx prisma studio --schema=packages/database/prisma/schema.prisma"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "bcryptjs": "^2.4.3",
+    "prisma": "^5.22.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.4.5"
+  }
+}

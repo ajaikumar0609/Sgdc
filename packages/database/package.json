@@ -1,0 +1,25 @@
+{
+  "name": "@shasthi-guru/database",
+  "version": "1.0.0",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "prisma": {
+    "seed": "npx tsx prisma/seed.ts"
+  },
+  "scripts": {
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:seed": "npx tsx prisma/seed.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "bcryptjs": "^2.4.3"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "prisma": "^5.22.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.4.5"
+  }
+}
